@@ -47,6 +47,8 @@ export default function Page() {
   const [notice, setNotice] = useState('')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [simulated, setSimulated] = useState<string | null>(null)
+  const [selectedTriggerId, setSelectedTriggerId] = useState('login')
+  const [deliveryResult, setDeliveryResult] = useState<{ trigger: string; channel: string; status: 'success' | 'warning'; message: string } | null>(null)
 
   const enabledCount = useMemo(() => triggers.flatMap(t => Object.values(t.templates)).filter(t => t.enabled).length, [triggers])
 
@@ -71,10 +73,29 @@ export default function Page() {
     } : trigger))
   }
 
-  function testSend(trigger: Trigger, channel: Channel) {
-    setNotice(`${channelMeta[channel].label} test queued for ${trigger.name}`)
+  function executeTrigger(trigger: Trigger, channel: Channel) {
+    const enabled = trigger.templates[channel].enabled
+    setActiveNav('Delivery logs')
     setSimulated(trigger.id)
+    setDeliveryResult({
+      trigger: trigger.name,
+      channel: channelMeta[channel].label,
+      status: enabled ? 'success' : 'warning',
+      message: enabled ? `${trigger.name} trigger executed successfully. A sandbox notification was delivered through ${channelMeta[channel].label}.` : `${trigger.name} ran, but ${channelMeta[channel].label} is disabled for this trigger.`,
+    })
+    setNotice(enabled ? `${trigger.name} test sent successfully` : `${trigger.name} completed with a disabled channel`)
     window.setTimeout(() => setSimulated(null), 1800)
+  }
+
+  function testSend(trigger: Trigger, channel: Channel) {
+    executeTrigger(trigger, channel)
+  }
+
+  function fireSelectedEvent() {
+    const trigger = triggers.find(item => item.id === selectedTriggerId)
+    if (!trigger) return
+    const firstEnabledChannel = (Object.keys(channelMeta) as Channel[]).find(channel => trigger.templates[channel].enabled) || 'email'
+    executeTrigger(trigger, firstEnabledChannel)
   }
 
   return (
@@ -94,9 +115,10 @@ export default function Page() {
         <div className="page-wrap">
           <div className="page-heading"><div><p className="eyebrow">NOTIFICATION CENTER</p><h1>Notifications</h1><p className="subtitle">Manage triggers, templates, and delivery channels from one place.</p></div><button className="primary-button" onClick={() => setNotice('New trigger flow started')}><span>＋</span> Add trigger</button></div>
           {notice && <div className="toast" role="status"><span>✓</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
+          {deliveryResult && <section className={`delivery-response card ${deliveryResult.status}`} role="status"><div className="response-icon">{deliveryResult.status === 'success' ? '✓' : '!'}</div><div><p className="eyebrow">DELIVERY LOG · SANDBOX</p><h2>{deliveryResult.status === 'success' ? 'Trigger executed successfully' : 'Trigger completed with a warning'}</h2><p>{deliveryResult.message}</p><small>{deliveryResult.trigger} · {deliveryResult.channel} · Just now</small></div><button className="outline-button" onClick={() => setDeliveryResult(null)}>Dismiss</button></section>}
           <div className="stats-grid"><div className="stat-card"><div className="stat-icon violet">◉</div><div><span>Active triggers</span><strong>2 <small>of 3</small></strong></div><em>+1 this month</em></div><div className="stat-card"><div className="stat-icon green">↗</div><div><span>Enabled channels</span><strong>{enabledCount} <small>of 9</small></strong></div><em>66.7% coverage</em></div><div className="stat-card"><div className="stat-icon amber">◷</div><div><span>Sent this month</span><strong>1,284</strong></div><em>+18.4% vs last month</em></div><div className="stat-card"><div className="stat-icon blue">✓</div><div><span>Delivery rate</span><strong>98.6%</strong></div><em>Across all channels</em></div></div>
 
-          <section className="simulator card"><div className="section-title"><div><h2>Trigger simulator</h2><p>Fire an event to test your notification flows.</p></div><span className="live-pill"><i /> Sandbox mode</span></div><div className="simulator-row"><div className="select-wrap"><label htmlFor="trigger">Select a trigger</label><select id="trigger"><option>Login</option><option>Logout</option><option>Not logged in for 1 week</option></select></div><button className="secondary-button" onClick={() => { setNotice('Login event fired — notifications are being delivered'); setSimulated('login') }}>▶ Fire event</button><div className="simulator-result">{simulated ? <><span className="pulse-dot" /> Sending {triggers.find(t => t.id === simulated)?.name} notifications...</> : <><span className="check-circle">✓</span> Last event: Login · 2 min ago</>}</div></div></section>
+          <section className="simulator card"><div className="section-title"><div><h2>Trigger simulator</h2><p>Fire an event to test your notification flows.</p></div><span className="live-pill"><i /> Sandbox mode</span></div><div className="simulator-row"><div className="select-wrap"><label htmlFor="trigger">Select a trigger</label><select id="trigger" value={selectedTriggerId} onChange={e => setSelectedTriggerId(e.target.value)}>{triggers.map(trigger => <option key={trigger.id} value={trigger.id}>{trigger.name}</option>)}</select></div><button className="secondary-button" onClick={fireSelectedEvent}>▶ Fire event</button><div className="simulator-result">{simulated ? <><span className="pulse-dot" /> Sending {triggers.find(t => t.id === simulated)?.name} notifications...</> : <><span className="check-circle">✓</span> Last event: Login · 2 min ago</>}</div></div></section>
 
           <section className="matrix-section"><div className="section-title"><div><h2>Notification templates</h2><p>Each trigger can send a different message on every channel.</p></div><button className="filter-button">All triggers <span>⌄</span></button></div><div className="table-wrap"><table><thead><tr><th className="trigger-col">TRIGGER</th>{(Object.keys(channelMeta) as Channel[]).map(channel => <th key={channel}><div className={`channel-heading ${channelMeta[channel].tone}`}><span>{channelMeta[channel].icon}</span>{channelMeta[channel].label}<small>{channelMeta[channel].detail}</small></div></th>)}<th className="row-actions"></th></tr></thead><tbody>{triggers.map(trigger => <tr key={trigger.id}><td className="trigger-cell"><strong>{trigger.name}</strong><span>{trigger.description}</span></td>{(Object.keys(channelMeta) as Channel[]).map(channel => { const template = trigger.templates[channel]; return <td key={channel}><div className={`template-card ${!template.enabled ? 'disabled' : ''}`}><div className="template-top"><span className={`status ${template.enabled ? 'on' : ''}`}><i />{template.enabled ? 'Active' : 'Off'}</span><button className="switch" aria-label={`Toggle ${channelMeta[channel].label} for ${trigger.name}`} onClick={() => toggleChannel(trigger.id, channel)}><span className={template.enabled ? 'on' : ''} /></button></div><p>{template.subject || template.body}</p><small className="updated">{template.updated}</small><div className="template-actions"><button onClick={() => openEditor(trigger.id, channel)}>{template.updated === 'Never' ? '＋ Create template' : 'Edit template'}</button><button onClick={() => testSend(trigger, channel)} disabled={template.updated === 'Never'}>Test send <span>↗</span></button></div></div></td>})}<td className="row-menu"><button aria-label={`More actions for ${trigger.name}`}>•••</button></td></tr>)}</tbody></table></div></section>
 
