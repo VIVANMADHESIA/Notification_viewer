@@ -48,7 +48,7 @@ export default function Page() {
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [simulated, setSimulated] = useState<string | null>(null)
   const [selectedTriggerId, setSelectedTriggerId] = useState('login')
-  const [deliveryResult, setDeliveryResult] = useState<{ trigger: string; channel: string; status: 'success' | 'warning'; message: string } | null>(null)
+  const [deliveryResult, setDeliveryResult] = useState<{ trigger: string; channel: string; status: 'success' | 'warning'; message: string; eventId: string; pulled: boolean; processed: boolean } | null>(null)
 
   const enabledCount = useMemo(() => triggers.flatMap(t => Object.values(t.templates)).filter(t => t.enabled).length, [triggers])
 
@@ -77,13 +77,17 @@ export default function Page() {
     const enabled = trigger.templates[channel].enabled
     setActiveNav('Delivery logs')
     setSimulated(trigger.id)
+    const eventId = `evt_${Date.now().toString(36)}`
     setDeliveryResult({
       trigger: trigger.name,
       channel: channelMeta[channel].label,
       status: enabled ? 'success' : 'warning',
-      message: enabled ? `${trigger.name} trigger executed successfully. A sandbox notification was delivered through ${channelMeta[channel].label}.` : `${trigger.name} ran, but ${channelMeta[channel].label} is disabled for this trigger.`,
+      message: enabled ? `${trigger.name} executed successfully. The ${channelMeta[channel].label} notification was pulled from the sandbox queue and processed.` : `${trigger.name} ran, but ${channelMeta[channel].label} is disabled for this trigger, so no notification was pulled.`,
+      eventId,
+      pulled: enabled,
+      processed: enabled,
     })
-    setNotice(enabled ? `${trigger.name} test sent successfully` : `${trigger.name} completed with a disabled channel`)
+    setNotice(enabled ? `${channelMeta[channel].label} notification pulled and processed` : `${trigger.name} completed with a disabled channel`)
     window.setTimeout(() => setSimulated(null), 1800)
   }
 
@@ -115,7 +119,7 @@ export default function Page() {
         <div className="page-wrap">
           <div className="page-heading"><div><p className="eyebrow">NOTIFICATION CENTER</p><h1>Notifications</h1><p className="subtitle">Manage triggers, templates, and delivery channels from one place.</p></div><button className="primary-button" onClick={() => setNotice('New trigger flow started')}><span>＋</span> Add trigger</button></div>
           {notice && <div className="toast" role="status"><span>✓</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
-          {deliveryResult && <section className={`delivery-response card ${deliveryResult.status}`} role="status"><div className="response-icon">{deliveryResult.status === 'success' ? '✓' : '!'}</div><div><p className="eyebrow">DELIVERY LOG · SANDBOX</p><h2>{deliveryResult.status === 'success' ? 'Trigger executed successfully' : 'Trigger completed with a warning'}</h2><p>{deliveryResult.message}</p><small>{deliveryResult.trigger} · {deliveryResult.channel} · Just now</small></div><button className="outline-button" onClick={() => setDeliveryResult(null)}>Dismiss</button></section>}
+          {deliveryResult && <section className={`delivery-response card ${deliveryResult.status}`} role="status" aria-live="polite"><div className="response-icon">{deliveryResult.status === 'success' ? '✓' : '!'}</div><div className="response-copy"><p className="eyebrow">DELIVERY LOG · SANDBOX</p><h2>{deliveryResult.status === 'success' ? 'Notification pulled successfully' : 'Trigger completed with a warning'}</h2><p>{deliveryResult.message}</p><div className="event-meta"><span><i className={deliveryResult.pulled ? 'complete' : ''} /> Pulled {deliveryResult.pulled ? 'successfully' : 'not pulled'}</span><span><i className={deliveryResult.processed ? 'complete' : ''} /> Processed {deliveryResult.processed ? 'successfully' : 'not processed'}</span><small>{deliveryResult.trigger} · {deliveryResult.channel} · {deliveryResult.eventId}</small></div></div><button className="outline-button" onClick={() => setDeliveryResult(null)}>Dismiss</button></section>}
           <div className="stats-grid"><div className="stat-card"><div className="stat-icon violet">◉</div><div><span>Active triggers</span><strong>2 <small>of 3</small></strong></div><em>+1 this month</em></div><div className="stat-card"><div className="stat-icon green">↗</div><div><span>Enabled channels</span><strong>{enabledCount} <small>of 9</small></strong></div><em>66.7% coverage</em></div><div className="stat-card"><div className="stat-icon amber">◷</div><div><span>Sent this month</span><strong>1,284</strong></div><em>+18.4% vs last month</em></div><div className="stat-card"><div className="stat-icon blue">✓</div><div><span>Delivery rate</span><strong>98.6%</strong></div><em>Across all channels</em></div></div>
 
           <section className="simulator card"><div className="section-title"><div><h2>Trigger simulator</h2><p>Fire an event to test your notification flows.</p></div><span className="live-pill"><i /> Sandbox mode</span></div><div className="simulator-row"><div className="select-wrap"><label htmlFor="trigger">Select a trigger</label><select id="trigger" value={selectedTriggerId} onChange={e => setSelectedTriggerId(e.target.value)}>{triggers.map(trigger => <option key={trigger.id} value={trigger.id}>{trigger.name}</option>)}</select></div><button className="secondary-button" onClick={fireSelectedEvent}>▶ Fire event</button><div className="simulator-result">{simulated ? <><span className="pulse-dot" /> Sending {triggers.find(t => t.id === simulated)?.name} notifications...</> : <><span className="check-circle">✓</span> Last event: Login · 2 min ago</>}</div></div></section>
